@@ -60,6 +60,7 @@ pub async fn check(server: &OnlineSource, q: &TitleQuery) -> Result<Option<Provi
                     server: server.name.clone(),
                     name: "AniLibria".into(),
                     balancer: "anilibria".into(),
+                    quality: Some("до 1080p".into()),
                     url: plugin_url(&server.id, "anilibria", "browse", &[("id", &id.to_string()), ("title", title)]),
                 }));
             }
@@ -129,7 +130,8 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
                 season: if is_movie { None } else { Some(1) },
                 episode: if is_movie { None } else { ord },
                 voice: Some("AniLibria".into()),
-                details: qualities.first().map(|q| q.label.clone()),
+                details: None,
+                quality: qualities.first().map(|q| q.label.clone()),
                 similar: false,
                 url: None,
                 stream: Some(RawStream {

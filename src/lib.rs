@@ -67,6 +67,8 @@ pub struct ProviderHit {
     pub server: String,
     pub name: String,
     pub balancer: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality: Option<String>,
     pub url: String,
 }
 
@@ -111,8 +113,10 @@ pub struct BrowseItem {
     pub episode: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub voice: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub details: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality: Option<String>,
     #[serde(default)]
     pub similar: bool,
     #[serde(skip_serializing_if = "Option::is_none")]

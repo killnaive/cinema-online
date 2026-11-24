@@ -295,6 +295,7 @@ pub async fn check(server: &OnlineSource, q: &TitleQuery) -> Result<Option<Provi
         server: server.name.clone(),
         name: "HDrezka".into(),
         balancer: "rezka".into(),
+        quality: Some("до 1080p".into()),
         url: plugin_url(&server.id, "rezka", "browse", &[("page_url", &best.url), ("title", &best.title)]),
     }))
 }
@@ -383,6 +384,7 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
                 episode: None,
                 voice: if tr_name.is_empty() { None } else { Some(tr_name.to_string()) },
                 details: None,
+                quality: Some("360p – 1080p".into()),
                 similar: false,
                 url: Some(plugin_url(
                     &server.id,
@@ -434,6 +436,7 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
                 episode: None,
                 voice: None,
                 details: None,
+                quality: None,
                 similar: false,
                 url: Some(plugin_url(&server.id, "rezka", "browse", &[("page_url", page_url), ("title", title), ("translator_id", &active_tr_id), ("season", sid)])),
                 stream: None,
@@ -453,6 +456,7 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
             episode: e.parse::<u32>().ok(),
             voice: None,
             details: None,
+            quality: Some("360p – 1080p".into()),
             similar: false,
             url: Some(plugin_url(
                 &server.id,

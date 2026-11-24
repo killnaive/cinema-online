@@ -67,6 +67,7 @@ pub async fn check(server: &OnlineSource, q: &TitleQuery) -> Result<Option<Provi
         server: server.name.clone(),
         name: "CDNVideoHub".into(),
         balancer: "cdnvideohub".into(),
+        quality: Some("до 4K".into()),
         url: plugin_url(
             &server.id,
             "cdnvideohub",
@@ -126,7 +127,8 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
                     season: None,
                     episode: None,
                     voice: None,
-                    details: Some("до 4K / 1080p".into()),
+                    details: None,
+                    quality: Some("до 4K".into()),
                     similar: false,
                     url: Some(plugin_url(&server.id, "cdnvideohub", "resolve", &[("vk_id", &vk_id)])),
                     stream: None,
@@ -183,6 +185,7 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
                     episode: None,
                     voice: Some(active_voice.clone()),
                     details: None,
+                    quality: None,
                     similar: false,
                     url: Some(plugin_url(
                         &server.id,
@@ -223,6 +226,7 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
             episode: Some(ep),
             voice: Some(active_voice.clone()),
             details: None,
+            quality: Some("до 4K".into()),
             similar: false,
             url: Some(plugin_url(&server.id, "cdnvideohub", "resolve", &[("vk_id", &vk_id)])),
             stream: None,

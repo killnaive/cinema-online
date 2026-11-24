@@ -95,6 +95,7 @@ pub async fn check(server: &OnlineSource, q: &TitleQuery) -> Result<Option<Provi
         server: server.name.clone(),
         name: "Kodik".into(),
         balancer: "kodik".into(),
+        quality: Some("до 720p".into()),
         url: plugin_url(&server.id, "kodik", "browse", &[(k, &v), ("title", title)]),
     }))
 }
@@ -156,7 +157,8 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
                     season: None,
                     episode: None,
                     voice: None,
-                    details: qual,
+                    details: None,
+                    quality: qual,
                     similar: false,
                     url: Some(plugin_url(&server.id, "kodik", "resolve", &[("link", link)])),
                     stream: None,
@@ -208,6 +210,7 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
                     episode: None,
                     voice: None,
                     details: None,
+                    quality: None,
                     similar: false,
                     url: Some(plugin_url(&server.id, "kodik", "browse", &[key_pair, ("title", title), ("voice", &active_voice), ("season", &ss)])),
                     stream: None,
@@ -236,6 +239,7 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
             episode: Some(ep_num),
             voice: None,
             details: None,
+            quality: Some("360p – 720p".into()),
             similar: false,
             url: Some(plugin_url(&server.id, "kodik", "resolve", &[("link", &link)])),
             stream: None,

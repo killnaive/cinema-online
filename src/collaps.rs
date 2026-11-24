@@ -84,6 +84,7 @@ pub async fn check(server: &OnlineSource, q: &TitleQuery) -> Result<Option<Provi
         server: server.name.clone(),
         name: "Collaps".into(),
         balancer: "collaps".into(),
+        quality: Some("до 720p".into()),
         url: plugin_url(&server.id, "collaps", "browse", &[("imdb", imdb.unwrap_or("")), ("kp", &kp_str), ("title", &q.title)]),
     }))
 }
@@ -151,6 +152,7 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
                     episode: Some(ep_num),
                     voice: None,
                     details: audio_summary(ep),
+                    quality: Some("360p – 720p".into()),
                     similar: false,
                     url: None,
                     stream: Some(stream),
@@ -173,6 +175,7 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
                 episode: None,
                 voice: None,
                 details: audio_summary(&source),
+                quality: Some("360p – 720p".into()),
                 similar: false,
                 url: None,
                 stream: Some(stream),
