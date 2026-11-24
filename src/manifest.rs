@@ -57,6 +57,7 @@ pub async fn remote_check(server: &OnlineSource, q: &TitleQuery, uid: &str) -> R
                 server: server.name.clone(),
                 name,
                 balancer: it.get("balancer").or_else(|| it.get("balanser")).and_then(Value::as_str).unwrap_or("").to_string(),
+                quality: it.get("quality").and_then(Value::as_str).map(str::to_string),
                 url: abs,
             })
         })
