@@ -1,0 +1,35 @@
+{
+  "id": "cinema-online",
+  "name": "Cinema Online",
+  "version": "0.1.0",
+  "description": "Базовый модуль онлайн-источников для Cinema (Collaps, HDrezka, Kodik)",
+  "sources": [
+    {
+      "id": "collaps",
+      "name": "Collaps",
+      "kind": "collaps",
+      "url": "https://api.nextembed.ws",
+      "mirror": "https://api.kinogram.best",
+      "token": "",
+      "enabled": true
+    },
+    {
+      "id": "rezka",
+      "name": "HDrezka",
+      "kind": "rezka",
+      "url": "https://rezka.ag",
+      "mirror": "",
+      "token": "",
+      "enabled": true
+    },
+    {
+      "id": "kodik",
+      "name": "Kodik",
+      "kind": "kodik",
+      "url": "https://kodik-api.com",
+      "mirror": "",
+      "token": "41dd95f84c21719b09d6c71182237a25",
+      "enabled": true
+    }
+  ]
+}
