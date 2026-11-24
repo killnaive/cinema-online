@@ -171,6 +171,10 @@ pub fn default_sources() -> Vec<OnlineSource> {
         .unwrap_or_default()
 }
 
+pub fn init_http(client: reqwest::Client) {
+    util::init_http(client);
+}
+
 pub fn is_playlist_url(u: &str) -> bool {
     util::is_playlist_url(u)
 }

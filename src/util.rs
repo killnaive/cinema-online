@@ -8,7 +8,16 @@ use url::Url;
 pub const CHROME_UA: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36";
 const CACHE_TTL: Duration = Duration::from_secs(300);
 
+static CUSTOM_HTTP: OnceLock<reqwest::Client> = OnceLock::new();
+
+pub fn init_http(client: reqwest::Client) {
+    let _ = CUSTOM_HTTP.set(client);
+}
+
 pub fn http() -> reqwest::Client {
+    if let Some(c) = CUSTOM_HTTP.get() {
+        return c.clone();
+    }
     static C: OnceLock<reqwest::Client> = OnceLock::new();
     C.get_or_init(|| {
         reqwest::Client::builder()

@@ -1,22 +1,50 @@
 use crate::util::{encode_form, header_map, http, is_playlist_url, norm_cmp, normalize_host, plugin_url, strip_tags, CHROME_UA};
 use crate::{BrowseItem, BrowseResult, OnlineError, OnlineSource, ProviderHit, RawQuality, RawStream, RawSubtitle, TitleQuery, VoiceOption};
 use base64::Engine;
+use parking_lot::Mutex;
 use regex::Regex;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::OnceLock;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use url::Url;
 
-fn host_of(server: &OnlineSource) -> String {
-    if !server.mirror.trim().is_empty() {
-        return normalize_host(&server.mirror, "https://rezka.ag");
-    }
-    if server.kind == "rezka" && !server.url.trim().is_empty() {
-        return normalize_host(&server.url, "https://rezka.ag");
-    }
-    "https://rezka.ag".to_string()
+fn session_cache() -> &'static Mutex<HashMap<String, (Instant, String)>> {
+    static C: OnceLock<Mutex<HashMap<String, (Instant, String)>>> = OnceLock::new();
+    C.get_or_init(Default::default)
 }
 
-fn cookie_of(server: &OnlineSource) -> String {
+fn candidate_hosts(server: &OnlineSource) -> Vec<String> {
+    let mut hosts = Vec::new();
+    if !server.mirror.trim().is_empty() {
+        hosts.push(normalize_host(&server.mirror, "https://rezka.ag"));
+    }
+    if server.kind == "rezka" && !server.url.trim().is_empty() {
+        let u = normalize_host(&server.url, "https://rezka.ag");
+        if !hosts.contains(&u) {
+            hosts.push(u);
+        }
+    }
+    for fallback in ["https://rezka.ag", "https://kvk.zone"] {
+        if !hosts.iter().any(|h| h == fallback) {
+            hosts.push(fallback.to_string());
+        }
+    }
+    hosts
+}
+
+fn primary_host(server: &OnlineSource) -> String {
+    candidate_hosts(server).into_iter().next().unwrap_or_else(|| "https://rezka.ag".to_string())
+}
+
+fn host_from_url(u: &str, fallback: &str) -> String {
+    Url::parse(u)
+        .ok()
+        .and_then(|p| Some(format!("{}://{}", p.scheme(), p.host_str()?)))
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+fn base_cookie(server: &OnlineSource) -> String {
     let c = server.cookie.trim();
     if c.is_empty() {
         "PHPSESSID=cinema_session_01".to_string()
@@ -27,15 +55,75 @@ fn cookie_of(server: &OnlineSource) -> String {
     }
 }
 
+async fn ensure_cookie(server: &OnlineSource, host: &str) -> String {
+    let base = base_cookie(server);
+    if base.contains("dle_user_id=") || server.login.trim().is_empty() || server.password.trim().is_empty() {
+        return base;
+    }
+    let key = format!("{host}:{}", server.login.trim());
+    if let Some(hit) = session_cache().lock().get(&key).and_then(|(at, c)| if at.elapsed() < Duration::from_secs(1800) { Some(c.clone()) } else { None }) {
+        return hit;
+    }
+
+    let url = format!("{host}/ajax/login/");
+    let form = [
+        ("login_name", server.login.trim()),
+        ("login_password", server.password.trim()),
+        ("login_not_save", "0"),
+    ];
+    let Ok(resp) = http()
+        .post(&url)
+        .header("User-Agent", CHROME_UA)
+        .header("Referer", format!("{host}/"))
+        .header("Origin", host)
+        .header("Cookie", &base)
+        .header("X-Requested-With", "XMLHttpRequest")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(encode_form(&form))
+        .timeout(Duration::from_secs(12))
+        .send()
+        .await
+    else {
+        return base;
+    };
+
+    let mut pairs = vec![base.clone()];
+    for val in resp.headers().get_all(reqwest::header::SET_COOKIE) {
+        if let Ok(s) = val.to_str() {
+            if let Some(kv) = s.split(';').next() {
+                let kv = kv.trim();
+                if !kv.contains("=deleted") && !kv.is_empty() {
+                    pairs.push(kv.to_string());
+                }
+            }
+        }
+    }
+    let merged = pairs.join("; ");
+    if merged.contains("dle_user_id=") {
+        session_cache().lock().insert(key, (Instant::now(), merged.clone()));
+    }
+    merged
+}
+
+fn friendly_err(host: &str, err: reqwest::Error) -> String {
+    if err.is_timeout() {
+        format!("таймаут подключения к {host}")
+    } else if err.is_connect() {
+        format!("адрес {host} недоступен (укажите рабочее зеркало HDrezka в настройках)")
+    } else {
+        format!("ошибка запроса к {host}")
+    }
+}
+
 fn detect_block(html: &str) -> Option<&'static str> {
     if html.contains("id=\"anubis_challenge\"") {
-        return Some("публичный адрес защищён проверкой (укажите личное зеркало, например из @hdrezka_bot, или cookie в настройках)");
+        return Some("зеркало защищено проверкой — укажите личное зеркало (например, из @hdrezka_bot), cookie или логин/пароль");
     }
     if html.contains("id=\"check-form\"") || html.contains("id=\"loginForm\"") {
-        return Some("зеркало HDrezka требует авторизацию — укажите cookie");
+        return Some("зеркало требует вход — укажите логин/пароль или cookie HDrezka в настройках (либо личное зеркало из @hdrezka_bot)");
     }
     if html.contains("<span>MIRROR</span>") {
-        return Some("зеркало HDrezka требует подтверждение в браузере — укажите другое зеркало или cookie");
+        return Some("зеркало требует подтверждение в браузере — укажите другое зеркало или cookie");
     }
     None
 }
@@ -44,18 +132,19 @@ async fn post_form(host: &str, path: &str, cookie: &str, form: &[(&str, &str)]) 
     let url = format!("{host}/{}", path.trim_start_matches('/'));
     let resp = http()
         .post(&url)
+        .header("User-Agent", CHROME_UA)
         .header("Referer", format!("{host}/"))
         .header("Origin", host)
         .header("Cookie", cookie)
         .header("X-Requested-With", "XMLHttpRequest")
         .header("Content-Type", "application/x-www-form-urlencoded")
         .body(encode_form(form))
-        .timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(10))
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| friendly_err(host, e))?;
     if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
+        return Err(format!("{host} ответил HTTP {}", resp.status()));
     }
     resp.text().await.map_err(|e| e.to_string())
 }
@@ -63,15 +152,16 @@ async fn post_form(host: &str, path: &str, cookie: &str, form: &[(&str, &str)]) 
 async fn get_page(url: &str, host: &str, cookie: &str) -> Result<String, String> {
     let resp = http()
         .get(url)
+        .header("User-Agent", CHROME_UA)
         .header("Referer", format!("{host}/"))
         .header("Origin", host)
         .header("Cookie", cookie)
-        .timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(12))
         .send()
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| friendly_err(host, e))?;
     if !resp.status().is_success() {
-        return Err(format!("HTTP {}", resp.status()));
+        return Err(format!("{host} ответил HTTP {}", resp.status()));
     }
     resp.text().await.map_err(|e| e.to_string())
 }
@@ -149,27 +239,52 @@ fn pick_hit<'a>(hits: &'a [Hit], q: &TitleQuery) -> Option<&'a Hit> {
     })
 }
 
-pub async fn check(server: &OnlineSource, q: &TitleQuery) -> Result<Option<ProviderHit>, String> {
-    let host = host_of(server);
-    let cookie = cookie_of(server);
+async fn search_on_host(server: &OnlineSource, host: &str, q: &TitleQuery) -> Result<Vec<Hit>, String> {
+    let cookie = ensure_cookie(server, host).await;
     let queries = [q.title.clone(), clean_query(&q.title), q.original_title.clone().unwrap_or_default()];
     let mut tried = Vec::new();
-    let mut hits = Vec::new();
-
     for term in queries {
         let term = term.trim().to_string();
         if term.is_empty() || tried.contains(&term) {
             continue;
         }
         tried.push(term.clone());
-        let html = post_form(&host, "engine/ajax/search.php", &cookie, &[("q", &term)]).await?;
+        let html = post_form(host, "engine/ajax/search.php", &cookie, &[("q", &term)]).await?;
         if let Some(msg) = detect_block(&html) {
             return Err(msg.to_string());
         }
-        hits = parse_search(&html, &host);
+        let hits = parse_search(&html, host);
         if !hits.is_empty() {
-            break;
+            return Ok(hits);
         }
+    }
+    Ok(Vec::new())
+}
+
+pub async fn check(server: &OnlineSource, q: &TitleQuery) -> Result<Option<ProviderHit>, String> {
+    let hosts = candidate_hosts(server);
+    let mut last_err = None;
+    let mut hits = Vec::new();
+
+    for host in &hosts {
+        match search_on_host(server, host, q).await {
+            Ok(h) if !h.is_empty() => {
+                hits = h;
+                last_err = None;
+                break;
+            }
+            Ok(_) => {
+                last_err = None;
+                break;
+            }
+            Err(e) => {
+                last_err = Some(e);
+            }
+        }
+    }
+
+    if let Some(err) = last_err {
+        return Err(err);
     }
 
     let Some(best) = pick_hit(&hits, q) else {
@@ -185,12 +300,12 @@ pub async fn check(server: &OnlineSource, q: &TitleQuery) -> Result<Option<Provi
 }
 
 pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> Result<BrowseResult, OnlineError> {
-    let host = host_of(server);
-    let cookie = cookie_of(server);
     let page_url = params
         .get("page_url")
         .filter(|s| !s.is_empty())
         .ok_or_else(|| OnlineError::bad_request("HDrezka: отсутствует адрес страницы"))?;
+    let host = host_from_url(page_url, &primary_host(server));
+    let cookie = ensure_cookie(server, &host).await;
 
     let html = get_page(page_url, &host, &cookie)
         .await
@@ -274,7 +389,7 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
                     &server.id,
                     "rezka",
                     "resolve",
-                    &[("film_id", &film_id), ("translator_id", &active_tr_id), ("favs", &favs), ("is_series", "0"), ("camrip", cam), ("ads", ads), ("director", dir)],
+                    &[("host", &host), ("film_id", &film_id), ("translator_id", &active_tr_id), ("favs", &favs), ("is_series", "0"), ("camrip", cam), ("ads", ads), ("director", dir)],
                 )),
                 stream: None,
             }],
@@ -344,7 +459,7 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
                 &server.id,
                 "rezka",
                 "resolve",
-                &[("film_id", &film_id), ("translator_id", &active_tr_id), ("season", &s), ("episode", &e), ("favs", &favs), ("is_series", "1")],
+                &[("host", &host), ("film_id", &film_id), ("translator_id", &active_tr_id), ("season", &s), ("episode", &e), ("favs", &favs), ("is_series", "1")],
             )),
             stream: None,
         })
@@ -407,8 +522,12 @@ fn parse_episodes(html: &str) -> Vec<(String, String, String)> {
 }
 
 pub async fn resolve(server: &OnlineSource, params: &HashMap<String, String>) -> Result<RawStream, OnlineError> {
-    let host = host_of(server);
-    let cookie = cookie_of(server);
+    let host = params
+        .get("host")
+        .filter(|s| !s.is_empty())
+        .map(|s| normalize_host(s, "https://rezka.ag"))
+        .unwrap_or_else(|| primary_host(server));
+    let cookie = ensure_cookie(server, &host).await;
     let film_id = params.get("film_id").map(String::as_str).unwrap_or("");
     let tr_id = params.get("translator_id").map(String::as_str).unwrap_or("");
     let favs = params.get("favs").map(String::as_str).unwrap_or("");

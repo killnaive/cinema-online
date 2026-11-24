@@ -34,7 +34,7 @@ async fn api_search(base: &str, token: &str, extra: &[(&str, &str)]) -> Result<V
             }
         }
     }
-    let resp = http().get(u).timeout(Duration::from_secs(12)).send().await.map_err(|e| e.to_string())?;
+    let resp = http().get(u).header("User-Agent", CHROME_UA).timeout(Duration::from_secs(12)).send().await.map_err(|e| e.to_string())?;
     if !resp.status().is_success() {
         return Err(format!("HTTP {}", resp.status()));
     }
@@ -258,6 +258,7 @@ pub async fn resolve(params: &HashMap<String, String>) -> Result<RawStream, Onli
 
     let html = http()
         .get(&iframe_url)
+        .header("User-Agent", CHROME_UA)
         .header("Referer", format!("{origin}/"))
         .timeout(Duration::from_secs(12))
         .send()
@@ -289,6 +290,7 @@ pub async fn resolve(params: &HashMap<String, String>) -> Result<RawStream, Onli
 
     let js = http()
         .get(format!("{origin}{player_src}"))
+        .header("User-Agent", CHROME_UA)
         .timeout(Duration::from_secs(12))
         .send()
         .await
@@ -322,6 +324,7 @@ pub async fn resolve(params: &HashMap<String, String>) -> Result<RawStream, Onli
 
     let data: Value = http()
         .post(format!("{origin}{api_path}"))
+        .header("User-Agent", CHROME_UA)
         .header("Referer", &iframe_url)
         .header("Origin", &origin)
         .header("Content-Type", "application/x-www-form-urlencoded")

@@ -46,6 +46,7 @@ async fn fetch_html(server: &OnlineSource, imdb: Option<&str>, kp: Option<u64>) 
             let embed_url = format!("{host}/embed/{path}");
             let res = http()
                 .get(&embed_url)
+                .header("User-Agent", CHROME_UA)
                 .header("Referer", format!("{host}/"))
                 .header("Origin", host.as_str())
                 .timeout(Duration::from_secs(12))
