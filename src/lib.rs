@@ -1,11 +1,14 @@
 //! Самостоятельный плагин-модуль онлайн-источников для Cinema.
 //!
 //! Не зависит от ядра приложения и других проектов: содержит встроенные балансеры
-//! (Collaps, HDrezka, Kodik), поддержку подключаемых JSON-манифестов (например, с GitHub)
+//! (CDNVideoHub до 4K, Collaps, HDrezka, Kodik, AniLibria), поддержку подключаемых JSON-манифестов
 //! и собственного удалённого протокола Cinema Online API.
 
+pub mod anilibria;
+pub mod cdnvideohub;
 pub mod collaps;
 pub mod kodik;
+pub mod kp;
 pub mod manifest;
 pub mod rezka;
 pub mod util;
@@ -197,24 +200,42 @@ pub async fn fetch_manifest(url: &str) -> Result<PluginManifest, OnlineError> {
 }
 
 pub async fn check_sources(sources: &[OnlineSource], q: &TitleQuery, uid: &str) -> (Vec<ProviderHit>, Vec<String>) {
+    let mut enriched = q.clone();
+    if enriched.kinopoisk_id.filter(|&k| k > 0).is_none() {
+        if let Some(im) = enriched.imdb_id.as_deref() {
+            enriched.kinopoisk_id = kp::resolve_kp_by_imdb(im).await;
+        }
+    }
+    let q_ref = &enriched;
+
     let tasks = sources.iter().filter(|s| s.enabled).map(|s| async move {
         match s.kind.as_str() {
-            "collaps" => match collaps::check(s, q).await {
+            "cdnvideohub" => match cdnvideohub::check(s, q_ref).await {
                 Ok(Some(hit)) => (vec![hit], None),
                 Ok(None) => (Vec::new(), None),
                 Err(e) => (Vec::new(), Some(format!("{}: {e}", s.name))),
             },
-            "rezka" => match rezka::check(s, q).await {
+            "collaps" => match collaps::check(s, q_ref).await {
                 Ok(Some(hit)) => (vec![hit], None),
                 Ok(None) => (Vec::new(), None),
                 Err(e) => (Vec::new(), Some(format!("{}: {e}", s.name))),
             },
-            "kodik" => match kodik::check(s, q).await {
+            "rezka" => match rezka::check(s, q_ref).await {
                 Ok(Some(hit)) => (vec![hit], None),
                 Ok(None) => (Vec::new(), None),
                 Err(e) => (Vec::new(), Some(format!("{}: {e}", s.name))),
             },
-            "remote" => match manifest::remote_check(s, q, uid).await {
+            "kodik" => match kodik::check(s, q_ref).await {
+                Ok(Some(hit)) => (vec![hit], None),
+                Ok(None) => (Vec::new(), None),
+                Err(e) => (Vec::new(), Some(format!("{}: {e}", s.name))),
+            },
+            "anilibria" => match anilibria::check(s, q_ref).await {
+                Ok(Some(hit)) => (vec![hit], None),
+                Ok(None) => (Vec::new(), None),
+                Err(e) => (Vec::new(), Some(format!("{}: {e}", s.name))),
+            },
+            "remote" => match manifest::remote_check(s, q_ref, uid).await {
                 Ok(hits) => (hits, None),
                 Err(e) => (Vec::new(), Some(format!("{}: {e}", s.name))),
             },
@@ -238,9 +259,11 @@ pub async fn browse(sources: &[OnlineSource], link: &str, uid: &str) -> Result<B
     if util::plugin_server_id(link).is_some() {
         let (_sid, kind, _action, params) = util::parse_plugin_url(link)?;
         return match kind.as_str() {
+            "cdnvideohub" => cdnvideohub::browse(source, &params).await,
             "collaps" => collaps::browse(source, &params).await,
             "rezka" => rezka::browse(source, &params).await,
             "kodik" => kodik::browse(source, &params).await,
+            "anilibria" => anilibria::browse(source, &params).await,
             _ => Err(OnlineError::bad_request("неизвестный балансер")),
         };
     }
@@ -252,6 +275,7 @@ pub async fn resolve(sources: &[OnlineSource], link: &str, uid: &str) -> Result<
     if util::plugin_server_id(link).is_some() {
         let (_sid, kind, _action, params) = util::parse_plugin_url(link)?;
         return match kind.as_str() {
+            "cdnvideohub" => cdnvideohub::resolve(source, &params).await,
             "rezka" => rezka::resolve(source, &params).await,
             "kodik" => kodik::resolve(&params).await,
             _ => Err(OnlineError::bad_request("разрешение потока для этого балансера не поддерживается")),
@@ -268,10 +292,12 @@ mod tests {
     #[test]
     fn loads_embedded_manifest_defaults() {
         let srcs = default_sources();
-        assert_eq!(srcs.len(), 3);
+        assert_eq!(srcs.len(), 5);
+        assert!(srcs.iter().any(|s| s.kind == "cdnvideohub"));
         assert!(srcs.iter().any(|s| s.kind == "collaps"));
         assert!(srcs.iter().any(|s| s.kind == "rezka"));
         assert!(srcs.iter().any(|s| s.kind == "kodik"));
+        assert!(srcs.iter().any(|s| s.kind == "anilibria"));
     }
 
     #[test]

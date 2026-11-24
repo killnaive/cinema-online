@@ -310,9 +310,6 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
     let html = get_page(page_url, &host, &cookie)
         .await
         .map_err(|e| OnlineError::upstream("rezka_error", format!("HDrezka: {e}")))?;
-    if let Some(msg) = detect_block(&html) {
-        return Ok(BrowseResult::message(&format!("HDrezka: {msg}")));
-    }
 
     let flat = html.replace('\n', " ");
     let re_series = Regex::new(r"\.initCDNSeriesEvents\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)").unwrap();
@@ -337,6 +334,8 @@ pub async fn browse(server: &OnlineSource, params: &HashMap<String, String>) -> 
         film_id = c[1].to_string();
         def_tr_id = c[2].to_string();
         def_flags = (c[3].to_string(), c[4].to_string(), c[5].to_string());
+    } else if let Some(msg) = detect_block(&html) {
+        return Ok(BrowseResult::message(&format!("HDrezka: {msg}")));
     } else {
         return Ok(BrowseResult::message("HDrezka: плеер на странице не найден"));
     }

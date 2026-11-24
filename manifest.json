@@ -1,9 +1,18 @@
 {
   "id": "cinema-online",
   "name": "Cinema Online",
-  "version": "0.1.0",
-  "description": "Базовый модуль онлайн-источников для Cinema (Collaps, HDrezka, Kodik)",
+  "version": "0.2.0",
+  "description": "Базовый модуль онлайн-источников для Cinema (CDNVideoHub 4K, Collaps, HDrezka, Kodik, AniLibria)",
   "sources": [
+    {
+      "id": "cdnvideohub",
+      "name": "CDNVideoHub (4K)",
+      "kind": "cdnvideohub",
+      "url": "https://plapi.cdnvideohub.com/api/v1/player/sv",
+      "mirror": "",
+      "token": "",
+      "enabled": true
+    },
     {
       "id": "collaps",
       "name": "Collaps",
@@ -29,6 +38,15 @@
       "url": "https://kodik-api.com",
       "mirror": "",
       "token": "41dd95f84c21719b09d6c71182237a25",
+      "enabled": true
+    },
+    {
+      "id": "anilibria",
+      "name": "AniLibria",
+      "kind": "anilibria",
+      "url": "https://api.anilibria.app/api/v1",
+      "mirror": "",
+      "token": "",
       "enabled": true
     }
   ]
